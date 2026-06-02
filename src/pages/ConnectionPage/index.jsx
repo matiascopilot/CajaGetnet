@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Usb, Wifi, RefreshCw, Cpu, HelpCircle, Power, CheckCircle, AlertTriangle, Zap, Unplug, MonitorSmartphone } from 'lucide-react';
+import { Usb, Wifi, RefreshCw, Cpu, HelpCircle, Power, CheckCircle, AlertTriangle, Unplug, MonitorSmartphone, Zap } from 'lucide-react';
 
 // Base de datos simple de fabricantes USB comunes en terminales POS
 const USB_VENDORS = {
@@ -56,7 +56,7 @@ export default function ConnectionPage({
   const [ports, setPorts] = useState([]);
   const [webSerialSupported, setWebSerialSupported] = useState(false);
 
-  // ── Cargar puertos emparejados ────────────────────────────────────────────────
+  // ── Cargar puertos emparejados ─────────────────────────────────────────────
   const loadRealPorts = useCallback(async () => {
     if (!('serial' in navigator)) return;
     try {
@@ -74,8 +74,6 @@ export default function ConnectionPage({
         };
       });
       setPorts(mapped);
-
-      // Auto-seleccionar el primero si no hay selección activa
       if (mapped.length > 0 && (!selectedPort || !selectedPort.startsWith('REAL'))) {
         setSelectedPort(mapped[0].id);
         setRealPort(mapped[0].portObj);
@@ -85,46 +83,40 @@ export default function ConnectionPage({
     }
   }, [selectedPort, setSelectedPort, setRealPort, addLog]);
 
-  // ── Inicialización + listeners de hot-plug ────────────────────────────────────
+  // ── Inicialización + listeners hot-plug ───────────────────────────────────
   useEffect(() => {
     if (!('serial' in navigator)) {
       setWebSerialSupported(false);
       return;
     }
-
     setWebSerialSupported(true);
     loadRealPorts();
 
     const handleConnect = (e) => {
       const display = getPortDisplayInfo(e.target);
-      addLog('SUCCESS', `🔌 Dispositivo conectado: ${display.label} (${display.subtitle})`);
+      addLog('SUCCESS', `Dispositivo conectado: ${display.label} (${display.subtitle})`);
       loadRealPorts();
     };
-
     const handleDisconnect = (e) => {
       const display = getPortDisplayInfo(e.target);
-      addLog('WARNING', `⚡ Dispositivo desconectado: ${display.label} (${display.subtitle})`);
-
-      // Si el puerto desconectado es el que estaba seleccionado, limpiarlo
+      addLog('WARNING', `Dispositivo desconectado: ${display.label} (${display.subtitle})`);
       if (realPort === e.target) {
         setRealPort(null);
         setSelectedPort('Ninguno');
         addLog('EVENT', 'Puerto activo fue removido. Seleccione otro o reconecte.');
       }
-
       loadRealPorts();
     };
 
     navigator.serial.addEventListener('connect', handleConnect);
     navigator.serial.addEventListener('disconnect', handleDisconnect);
-
     return () => {
       navigator.serial.removeEventListener('connect', handleConnect);
       navigator.serial.removeEventListener('disconnect', handleDisconnect);
     };
   }, [loadRealPorts, realPort, setRealPort, setSelectedPort, addLog]);
 
-  // ── Escanear puertos manualmente ──────────────────────────────────────────────
+  // ── Escanear puertos manualmente ──────────────────────────────────────────
   const handleScanPorts = async () => {
     setIsScanning(true);
     addLog('EVENT', 'Escaneando puertos COM locales...');
@@ -135,7 +127,7 @@ export default function ConnectionPage({
     }, 800);
   };
 
-  // ── Vincular nuevo puerto ─────────────────────────────────────────────────────
+  // ── Vincular nuevo puerto ─────────────────────────────────────────────────
   const handleRequestPortPermission = async () => {
     if (!webSerialSupported) {
       addLog('ERROR', 'Web Serial API no disponible. Use Chrome, Edge u Opera.');
@@ -145,7 +137,6 @@ export default function ConnectionPage({
       addLog('INFO', 'Solicitando permiso de puerto serial...');
       const port = await navigator.serial.requestPort();
       const display = getPortDisplayInfo(port);
-
       const newId = `REAL-USB-${display.vidHex || 'XX'}-${display.pidHex || 'XX'}-${Date.now()}`;
       const newItem = {
         id: newId,
@@ -156,7 +147,6 @@ export default function ConnectionPage({
         pidHex: display.pidHex,
         portObj: port,
       };
-
       setPorts(prev => [newItem, ...prev.filter(p => p.portObj !== port)]);
       setSelectedPort(newId);
       setRealPort(port);
@@ -168,7 +158,9 @@ export default function ConnectionPage({
         addLog('ERROR', `Error al vincular: ${err.message}`);
       }
     }
-  };  const handlePortSelect = (port) => {
+  };
+
+  const handlePortSelect = (port) => {
     setSelectedPort(port.id);
     setRealPort(port.portObj);
     addLog('INFO', `Puerto activo → ${port.name}`);
@@ -176,155 +168,186 @@ export default function ConnectionPage({
 
   const handleUnbindPort = async (portToUnbind) => {
     if (selectedPort === portToUnbind.id) {
-      if (connectionStatus === 'connected') {
-        await onConnectToggle();
-      }
+      if (connectionStatus === 'connected') await onConnectToggle();
       setSelectedPort('Ninguno');
       setRealPort(null);
     }
     try {
       if (portToUnbind.portObj && typeof portToUnbind.portObj.forget === 'function') {
         await portToUnbind.portObj.forget();
-        addLog('SUCCESS', `Permiso del navegador revocado para: ${portToUnbind.name}`);
+        addLog('SUCCESS', `Permiso revocado para: ${portToUnbind.name}`);
       }
     } catch (e) {
-      console.warn("forget() no soportado:", e);
+      console.warn('forget() no soportado:', e);
     }
     setPorts(prev => prev.filter(p => p.id !== portToUnbind.id));
-    addLog('WARNING', `🔌 Puerto desvinculado: ${portToUnbind.name}`);
+    addLog('WARNING', `Puerto desvinculado: ${portToUnbind.name}`);
   };
-  // ── Render ────────────────────────────────────────────────────────────────────
+
+  // ── Derivados de estado ───────────────────────────────────────────────────
+  const isConnected   = connectionStatus === 'connected';
+  const isConnecting  = connectionStatus === 'connecting';
+  const canConnect    = connectionType === 'USB'
+    ? !!realPort || isConnected
+    : !!(wifiConfig.ip && wifiConfig.port);
+
+  const ctaLabel = isConnected
+    ? 'Desconectar Canal'
+    : isConnecting
+      ? 'Abriendo Canal...'
+      : connectionType === 'USB'
+        ? `Iniciar Conexión (${baudRate} bps)`
+        : `Conectar a ${wifiConfig.ip}:${wifiConfig.port}`;
+
+  const ctaClass = isConnected
+    ? 'btn-cta btn-cta-danger'
+    : isConnecting
+      ? 'btn-cta btn-cta-warning'
+      : 'btn-cta btn-cta-primary';
+
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="panel-card" style={{ maxWidth: '860px', margin: '0 auto', width: '100%' }}>
-      <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    <div className="panel-card" style={{ maxWidth: 860, margin: '0 auto', width: '100%' }}>
+
+      {/* ── Header ── */}
+      <div className="card-header">
         <div className="card-title">
-          <Usb size={18} className="text-primary" />
+          <Usb size={16} className="text-primary" />
           Gestión de Conexión y Puertos COM
         </div>
         <div className="segmented-control" style={{ margin: 0 }}>
-          <button type="button" className={`segment-btn ${connectionType === 'USB' ? 'active' : ''}`}
-            onClick={() => { setConnectionType('USB'); addLog('INFO', 'Modo: USB / COM Serial.'); }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-              <Usb size={13} /> USB (COM)
-            </span>
+          <button
+            type="button"
+            id="tab-usb"
+            className={`segment-btn ${connectionType === 'USB' ? 'active' : ''}`}
+            onClick={() => { setConnectionType('USB'); addLog('INFO', 'Modo: USB / COM Serial.'); }}
+          >
+            <Usb size={13} /> USB (COM)
           </button>
-          <button type="button" className={`segment-btn ${connectionType === 'WIFI' ? 'active' : ''}`}
-            onClick={() => { setConnectionType('WIFI'); addLog('INFO', 'Modo: WiFi / TCP.'); }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-              <Wifi size={13} /> WiFi (TCP)
-            </span>
+          <button
+            type="button"
+            id="tab-wifi"
+            className={`segment-btn ${connectionType === 'WIFI' ? 'active' : ''}`}
+            onClick={() => { setConnectionType('WIFI'); addLog('INFO', 'Modo: WiFi / TCP.'); }}
+          >
+            <Wifi size={13} /> WiFi (TCP)
           </button>
         </div>
       </div>
 
-      <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+      {/* ── Body ── */}
+      <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
 
         {connectionType === 'USB' ? (
-          <div>
-            {/* Encabezado de puertos + badge de compatibilidad */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-              <div className="selector-label" style={{ margin: 0 }}>Puertos COM detectados</div>
-              <span style={{
-                fontSize: '0.72rem', fontWeight: 'bold', padding: '0.2rem 0.55rem', borderRadius: '20px',
-                backgroundColor: webSerialSupported ? 'var(--success-light)' : 'var(--danger-light)',
-                color: webSerialSupported ? 'var(--success)' : 'var(--danger)',
-                display: 'flex', alignItems: 'center', gap: '0.25rem',
-                border: `1px solid ${webSerialSupported ? 'var(--success)' : 'var(--danger)'}`,
-              }}>
-                {webSerialSupported ? <CheckCircle size={11} /> : <AlertTriangle size={11} />}
-                {webSerialSupported ? 'Web Serial OK' : 'No Soportado'}
-              </span>
-            </div>
-
-            {/* Baud Rate Selector */}
-            <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1rem', alignItems: 'center' }}>
-              <div className="form-group" style={{ flex: 1 }}>
-                <label className="form-label">Velocidad (Baud Rate)</label>
+          <>
+            {/* ── Baud Rate + Hot-plug ── */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', alignItems: 'end' }}>
+              <div className="form-group">
+                <label className="form-label" htmlFor="baud-rate-select">Velocidad de Comunicación</label>
                 <select
+                  id="baud-rate-select"
                   className="form-select"
                   value={baudRate}
                   onChange={(e) => {
                     setBaudRate(e.target.value);
                     addLog('INFO', `Baud rate → ${e.target.value} bps`);
                   }}
-                  disabled={connectionStatus === 'connected'}
+                  disabled={isConnected}
                 >
                   {BAUD_RATES.map(br => (
-                    <option key={br} value={br}>{br} bps {br === '115200' ? '(recomendado)' : ''}</option>
+                    <option key={br} value={br}>{br} bps{br === '115200' ? ' — recomendado' : ''}</option>
                   ))}
                 </select>
               </div>
-              <div style={{
-                flex: 1, padding: '0.6rem 0.75rem', backgroundColor: 'var(--border-light)',
-                borderRadius: '6px', fontSize: '0.78rem', color: 'var(--text-muted)',
-                display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '1.1rem',
-              }}>
-                <MonitorSmartphone size={14} style={{ color: 'var(--primary)', flexShrink: 0 }} />
-                <span>Hot-plug activo: los dispositivos USB se detectan automáticamente al conectar/desconectar.</span>
+
+              <div className="hotplug-card">
+                <MonitorSmartphone size={15} style={{ color: 'var(--primary)', flexShrink: 0 }} />
+                <span style={{ fontSize: '0.78rem', color: '#1e40af', lineHeight: 1.4 }}>
+                  Hot-plug activo — los dispositivos USB se detectan automáticamente.
+                </span>
               </div>
             </div>
 
-            {/* Lista de puertos */}
+            {/* ── Header puertos ── */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span className="selector-label">Puertos COM detectados</span>
+              <span style={{
+                fontSize: '0.7rem',
+                fontWeight: 700,
+                padding: '0.15rem 0.55rem',
+                borderRadius: '20px',
+                backgroundColor: webSerialSupported ? 'var(--success-light)' : 'var(--danger-light)',
+                color: webSerialSupported ? 'var(--success)' : 'var(--danger)',
+                border: `1px solid ${webSerialSupported ? 'var(--success)' : 'var(--danger)'}`,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.25rem',
+              }}>
+                {webSerialSupported ? <CheckCircle size={11} /> : <AlertTriangle size={11} />}
+                {webSerialSupported ? 'Web Serial OK' : 'No Soportado'}
+              </span>
+            </div>
+
+            {/* ── Lista de puertos ── */}
             {ports.length > 0 ? (
-              <div className="port-list" style={{ marginBottom: '1rem' }}>
+              <div className="port-list">
                 {ports.map((port) => (
                   <div
                     key={port.id}
+                    id={`port-${port.id}`}
                     className={`port-option ${selectedPort === port.id ? 'active' : ''}`}
                     onClick={() => handlePortSelect(port)}
+                    role="radio"
+                    aria-checked={selectedPort === port.id}
+                    tabIndex={0}
+                    onKeyDown={(e) => e.key === 'Enter' && handlePortSelect(port)}
                   >
                     <div className="port-option-left">
-                      <div className="port-radio" />
+                      <div className="port-radio" aria-hidden="true" />
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
-                        <span style={{ fontWeight: 600, fontSize: '0.88rem' }}>{port.name}</span>
-                        <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                        <span style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--text-dark)' }}>
+                          {port.name}
+                        </span>
+                        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
                           {port.subtitle}
                         </span>
                       </div>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
                       {port.vendor && (
                         <span style={{
-                          fontSize: '0.65rem', fontWeight: 700, padding: '0.1rem 0.4rem',
-                          borderRadius: '4px', backgroundColor: 'var(--primary-light)', color: 'var(--primary)',
-                          letterSpacing: '0.3px', border: '1px solid var(--border-accent)',
+                          fontSize: '0.62rem', fontWeight: 800, padding: '0.1rem 0.4rem',
+                          borderRadius: '4px', backgroundColor: 'var(--primary-light)',
+                          color: 'var(--primary)', letterSpacing: '0.3px',
+                          border: '1px solid var(--border-accent)',
                         }}>
                           {port.vendor.split('(')[0].trim()}
                         </span>
                       )}
                       {selectedPort === port.id && (
-                        <span className="port-badge" style={{ backgroundColor: 'var(--success)' }}>
-                          ACTIVO
-                        </span>
+                        <span className="port-badge">ACTIVO</span>
                       )}
                       <button
                         type="button"
+                        id={`unbind-${port.id}`}
+                        title="Desvincular puerto COM"
                         style={{
-                          background: 'none',
-                          border: 'none',
-                          color: 'var(--danger)',
-                          cursor: 'pointer',
-                          padding: '0.25rem',
-                          borderRadius: '4px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
+                          background: 'none', border: 'none',
+                          color: 'var(--text-subtle)', cursor: 'pointer',
+                          padding: '0.25rem', borderRadius: '4px',
+                          display: 'flex', alignItems: 'center',
                           transition: 'all 0.15s ease',
-                          marginLeft: '0.25rem'
                         }}
                         onMouseEnter={(e) => {
-                          e.currentTarget.style.backgroundColor = 'var(--danger-light)';
-                          e.currentTarget.style.transform = 'scale(1.1)';
+                          e.currentTarget.style.color = 'var(--danger)';
+                          e.currentTarget.style.background = 'var(--danger-light)';
                         }}
                         onMouseLeave={(e) => {
-                          e.currentTarget.style.backgroundColor = 'transparent';
-                          e.currentTarget.style.transform = 'scale(1)';
+                          e.currentTarget.style.color = 'var(--text-subtle)';
+                          e.currentTarget.style.background = 'none';
                         }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleUnbindPort(port);
-                        }}
-                        title="Desvincular puerto COM"
+                        onClick={(e) => { e.stopPropagation(); handleUnbindPort(port); }}
                       >
                         <Unplug size={14} />
                       </button>
@@ -333,83 +356,98 @@ export default function ConnectionPage({
                 ))}
               </div>
             ) : (
-              <div style={{
-                padding: '2rem 1.5rem', border: '1px dashed var(--border-color)', borderRadius: '8px',
-                textAlign: 'center', color: 'var(--text-muted)', marginBottom: '1rem', fontSize: '0.88rem',
-                background: 'linear-gradient(135deg, var(--border-light) 0%, rgba(237,245,255,0.5) 100%)',
-              }}>
-                <Unplug size={28} style={{ color: 'var(--border-color)', marginBottom: '0.5rem' }} />
-                <div>
+              <div className="empty-state">
+                <Unplug size={28} className="empty-state-icon" />
+                <p className="empty-state-text">
                   {webSerialSupported
                     ? 'No hay puertos COM emparejados. Conecte un dispositivo USB y haga clic en "Vincular Puerto Real".'
                     : 'Web Serial no disponible en este navegador. Utilice Chrome, Edge u Opera.'}
-                </div>
+                </p>
               </div>
             )}
 
-            {/* Botones de acción */}
-            <div style={{ display: 'flex', gap: '0.75rem' }}>
-              <button type="button" className="btn-secondary" style={{ flex: 1, height: '40px' }}
-                onClick={handleScanPorts} disabled={isScanning || !webSerialSupported}>
-                <RefreshCw size={14} className={isScanning ? 'animate-spin' : ''} />
+            {/* ── Botones de acción ── */}
+            <div style={{ display: 'flex', gap: '0.65rem' }}>
+              <button
+                type="button"
+                id="btn-refresh-ports"
+                className="btn-secondary"
+                style={{ flex: 1, height: 'var(--btn-height)' }}
+                onClick={handleScanPorts}
+                disabled={isScanning || !webSerialSupported}
+              >
+                <RefreshCw size={14} style={{ animation: isScanning ? 'spin 1s linear infinite' : 'none' }} />
                 {isScanning ? 'Escaneando...' : 'Refrescar Puertos'}
               </button>
-              <button type="button" className="btn-connect" style={{ flex: 1.2, height: '40px', justifyContent: 'center' }}
-                onClick={handleRequestPortPermission} disabled={!webSerialSupported}>
+              <button
+                type="button"
+                id="btn-bind-port"
+                className="btn-primary"
+                style={{ flex: 1.4, height: 'var(--btn-height)' }}
+                onClick={handleRequestPortPermission}
+                disabled={!webSerialSupported}
+              >
                 <Cpu size={15} />
                 Vincular Puerto Real
               </button>
             </div>
-          </div>
+          </>
         ) : (
-          <div>
-            <div className="selector-label">Configuración del Servidor TCP (POS)</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+          /* ── WiFi Config ── */
+          <div className="wifi-fields">
+            <div className="form-section-title">Configuración del Servidor TCP (POS)</div>
+            <div className="form-grid-3">
               <div className="form-group">
-                <label className="form-label">Dirección IP del Dispositivo</label>
-                <input type="text" className="form-input"
-                  value={wifiConfig.ip} onChange={(e) => setWifiConfig({ ...wifiConfig, ip: e.target.value })}
-                  placeholder="192.168.1.100" />
+                <label className="form-label" htmlFor="wifi-ip">Dirección IP del Dispositivo</label>
+                <input
+                  type="text"
+                  id="wifi-ip"
+                  className="form-input"
+                  value={wifiConfig.ip}
+                  onChange={(e) => setWifiConfig({ ...wifiConfig, ip: e.target.value })}
+                  placeholder="192.168.1.100"
+                />
               </div>
               <div className="form-group">
-                <label className="form-label">Puerto TCP</label>
-                <input type="text" className="form-input"
-                  value={wifiConfig.port} onChange={(e) => setWifiConfig({ ...wifiConfig, port: e.target.value })}
-                  placeholder="8080" />
+                <label className="form-label" htmlFor="wifi-port">Puerto TCP</label>
+                <input
+                  type="text"
+                  id="wifi-port"
+                  className="form-input"
+                  value={wifiConfig.port}
+                  onChange={(e) => setWifiConfig({ ...wifiConfig, port: e.target.value })}
+                  placeholder="8080"
+                />
               </div>
             </div>
           </div>
         )}
 
-        {/* Nota informativa */}
-        <div style={{
-          padding: '0.65rem 0.85rem', backgroundColor: 'var(--border-light)', borderRadius: '6px',
-          fontSize: '0.82rem', color: 'var(--text-muted)', display: 'flex', gap: '0.5rem', alignItems: 'flex-start',
-          borderLeft: '3px solid var(--primary)',
-        }}>
-          <HelpCircle size={16} className="text-primary" style={{ flexShrink: 0, marginTop: '2px' }} />
+        {/* ── Nota informativa ── */}
+        <div className="info-banner">
+          <HelpCircle size={15} className="text-primary" />
           <span>
             {connectionType === 'USB'
-              ? 'La Web Serial API proporciona comunicación directa con puertos COM físicos. Los dispositivos conectados se detectan automáticamente. No se simulan puertos para garantizar pruebas reales.'
-              : 'En modo WiFi, la caja se conecta al POS por TCP/IP. Asegúrese de estar en la misma red.'}
+              ? 'La Web Serial API proporciona comunicación directa con puertos COM físicos. Los dispositivos se detectan automáticamente. No se simulan puertos para garantizar pruebas reales.'
+              : 'En modo WiFi, la caja se conecta al POS por TCP/IP. Asegúrese de que ambos dispositivos estén en la misma red local.'}
           </span>
         </div>
 
-        {/* Botón conectar/desconectar */}
-        <button type="button"
-          className={`btn-connect ${connectionStatus === 'connected' ? 'connected' : ''}`}
-          style={{ width: '100%', justifyContent: 'center', height: '46px', fontSize: '0.95rem' }}
+        {/* ── CTA Conectar / Desconectar ── */}
+        <button
+          type="button"
+          id="btn-connect-toggle"
+          className={ctaClass}
           onClick={onConnectToggle}
-          disabled={connectionStatus === 'connecting' || (connectionType === 'USB' && !realPort && connectionStatus !== 'connected')}
+          disabled={isConnecting || (!canConnect && !isConnected)}
         >
-          <Power size={16} />
-          {connectionStatus === 'connected'
-            ? 'Desconectar Canal'
-            : connectionStatus === 'connecting'
-              ? 'Abriendo Canal...'
-              : `Iniciar Conexión ${connectionType === 'USB' ? `(${baudRate} bps)` : `(${wifiConfig.ip})`}`}
+          <Power size={17} />
+          {ctaLabel}
         </button>
       </div>
+
+      {/* Spin keyframe inline */}
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }

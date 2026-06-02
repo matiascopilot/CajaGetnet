@@ -548,7 +548,12 @@ function App() {
       </div>
 
       {/* ── CONTENIDO PRINCIPAL ───────────────────────────────────────────── */}
-      <main className="main-content" style={isFullPage ? { gridTemplateColumns: '1fr' } : {}}>
+      <main
+        className="main-content"
+        style={isFullPage
+          ? { gridTemplateColumns: '1fr', overflowY: 'auto' }
+          : {}}
+      >
 
         {mainTab === 'conexion' && (
           <ConnectionPage
@@ -569,9 +574,17 @@ function App() {
 
         {mainTab === 'simulador' && (
           <>
-            {/* ── Panel izquierdo ── */}
-            <div className="left-panel" style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: '1rem', alignItems: 'start' }}>
-              <div className="tab-sidebar">
+            {/* ── Panel izquierdo: sidebar fija + contenido con scroll ── */}
+            <div
+              className="left-panel"
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '72px 1fr',
+                gap: '0.85rem',
+                alignItems: 'start',
+              }}
+            >
+              <div className="tab-sidebar" style={{ position: 'sticky', top: 0 }}>
                 {[
                   { id: 'sale',   icon: <CreditCard size={20} />, label: 'Ventas'  },
                   { id: 'refund', icon: <Trash2     size={20} />, label: 'Anular'  },
@@ -596,7 +609,7 @@ function App() {
               </div>
             </div>
 
-            {/* ── Panel derecho ── */}
+            {/* ── Panel derecho: terminal ocupa todo, stats fijos abajo ── */}
             <div className="right-panel">
               <TerminalConsole logs={logs} onClearLogs={handleClearLogs} onSendCommand={handleSendCommand} />
               <ResponseStats lastResponse={lastResponse} averageLatency={avgLatency} />
@@ -605,141 +618,7 @@ function App() {
         )}
       </main>
 
-      {/* ── Estilos inline ─────────────────────────────────────────────── */}
-      <style dangerouslySetInnerHTML={{ __html: `
-        /* ── Header integration selector ── */
-        .header-integration-selector {
-          display: flex;
-          align-items: center;
-          gap: 0.4rem;
-        }
-        .header-integration-label {
-          font-size: 0.65rem;
-          font-weight: 800;
-          letter-spacing: 0.6px;
-          color: rgba(255,255,255,0.35);
-          text-transform: uppercase;
-          white-space: nowrap;
-        }
-        .header-select-wrapper {
-          position: relative;
-          display: flex;
-          align-items: center;
-        }
-        .header-select {
-          appearance: none;
-          background: rgba(255,255,255,0.07);
-          border: 1px solid rgba(255,255,255,0.14);
-          color: rgba(255,255,255,0.9);
-          font-family: inherit;
-          font-size: 0.82rem;
-          font-weight: 600;
-          padding: 0.3rem 1.8rem 0.3rem 0.65rem;
-          border-radius: 6px;
-          cursor: pointer;
-          outline: none;
-          transition: background 0.15s ease, border-color 0.15s ease;
-          min-width: 170px;
-        }
-        .header-select:hover {
-          background: rgba(255,255,255,0.12);
-          border-color: rgba(255,255,255,0.25);
-        }
-        .header-select:focus {
-          border-color: #3b82f6;
-          background: rgba(59,130,246,0.12);
-        }
-        .header-select option {
-          background: #0f1e33;
-          color: #e0e6ed;
-        }
-        .header-select-icon {
-          position: absolute;
-          right: 0.55rem;
-          color: rgba(255,255,255,0.45);
-          pointer-events: none;
-        }
 
-        /* ── Header status pill ── */
-        .header-status-pill {
-          display: flex;
-          align-items: center;
-          gap: 0.4rem;
-          font-size: 0.75rem;
-          font-weight: 700;
-          padding: 0.25rem 0.65rem;
-          border-radius: 20px;
-          letter-spacing: 0.3px;
-        }
-        .header-status-pill.connected {
-          background: rgba(25, 128, 56, 0.18);
-          color: #4ade80;
-          border: 1px solid rgba(74, 222, 128, 0.3);
-        }
-        .header-status-pill.connecting {
-          background: rgba(245, 196, 0, 0.15);
-          color: #fbbf24;
-          border: 1px solid rgba(251,191,36,0.3);
-        }
-        .header-status-dot {
-          width: 6px;
-          height: 6px;
-          border-radius: 50%;
-          background: currentColor;
-          animation: pulse 2s infinite ease-in-out;
-        }
-
-        /* ── Status strip ── */
-        .status-strip {
-          background-color: var(--bg-card);
-          border-bottom: 1px solid var(--border-color);
-          padding: 0.5rem 2rem;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 1rem;
-          flex-wrap: wrap;
-        }
-        .status-strip-badge {
-          font-size: 0.7rem;
-          font-weight: 800;
-          padding: 0.15rem 0.55rem;
-          border-radius: 20px;
-          letter-spacing: 0.4px;
-        }
-        .status-strip-info {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          font-size: 0.82rem;
-          color: var(--text-muted);
-        }
-        .status-sep { color: var(--border-color); }
-
-        /* ── Mini Sidebar ── */
-        .tab-sidebar {
-          display: flex; flex-direction: column; gap: 0.5rem;
-          background: var(--bg-card); border: 1px solid var(--border-color);
-          border-radius: 8px; padding: 0.6rem 0.4rem; align-items: center;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-        }
-        .sidebar-tab-btn {
-          display: flex; flex-direction: column; align-items: center; justify-content: center;
-          width: 66px; height: 66px; border-radius: 8px; border: none;
-          background: none; color: var(--text-muted); cursor: pointer;
-          transition: var(--transition-fast); gap: 0.35rem;
-        }
-        .sidebar-tab-btn:hover { background: var(--border-light); color: var(--text-dark); }
-        .sidebar-tab-btn.active {
-          background: var(--primary-light); color: var(--primary);
-          border: 1px solid var(--border-accent);
-        }
-        .sidebar-tab-label {
-          font-size: 0.6rem; font-weight: 700;
-          text-transform: uppercase; letter-spacing: 0.2px;
-        }
-        .tab-content { flex: 1; }
-      `}} />
     </div>
   );
 }
